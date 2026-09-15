@@ -6,7 +6,6 @@
 
 #include "SdkHeaders.hpp"
 #include "ball.hpp"
-#include "SDK_HEADERS/Core_structs.hpp"
 
 class Trajectory
 {

@@ -15,7 +15,6 @@ class InputBindings
 {
 public:
     static std::vector<GamepadBinding> GetGamepadBindings();
-    static void Debug();
 };
 
 #endif

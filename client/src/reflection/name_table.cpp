@@ -4,7 +4,7 @@
 #include "nerine_memory.hpp"
 #include "offsets.hpp"
 
-std::string NameTable::Resolve(int32_t nameId)
+std::string NameTable::Resolve(int nameId)
 {
     struct NameBuffer
     {
@@ -12,7 +12,7 @@ std::string NameTable::Resolve(int32_t nameId)
     };
 
     uint64_t base      = NerineGlobals::GetInstance().GetModuleBase();
-    uint64_t namesData = ReadMemory<uint64_t>(base + kGNamesOffset);
+    uint64_t namesData = ReadMemory<uint64_t>(base + g_namesOffset);
     uint64_t entry     = ReadMemory<uint64_t>(namesData + nameId * 8);
     if (!entry)
     {

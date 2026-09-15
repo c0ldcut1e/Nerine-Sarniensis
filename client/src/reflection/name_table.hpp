@@ -7,7 +7,7 @@
 class NameTable
 {
 public:
-    static std::string Resolve(int32_t nameId);
+    static std::string Resolve(int nameId);
 };
 
 #endif

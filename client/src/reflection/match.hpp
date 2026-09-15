@@ -10,7 +10,6 @@ public:
     static bool IsActive();
     static bool IsRoundActive();
     static bool HasBallBeenHit();
-    static void Debug();
 };
 
 #endif

@@ -123,7 +123,7 @@ ssize_t NerineDevice::ReadMemory(pid_t pid, uint64_t address, void *data, size_t
     int result;
 
     request.command = NERINE_NETLINK_COMMAND_READ_MEMORY;
-    request.pid     = (int32_t) pid;
+    request.pid     = (int) pid;
     request.address = address;
     request.size    = size;
 

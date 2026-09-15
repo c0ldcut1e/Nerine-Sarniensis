@@ -2,10 +2,10 @@
 
 #include <algorithm>
 
+#include "SdkHeaders.hpp"
 #include "reflection/boost_pad_list.hpp"
 #include "reflection/local_player.hpp"
 #include "reflection/projection.hpp"
-#include "SDK_HEADERS/Core_structs.hpp"
 
 #include <imgui.h>
 

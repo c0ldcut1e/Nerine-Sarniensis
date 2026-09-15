@@ -4,23 +4,23 @@
 #include "nerine_memory.hpp"
 #include "offsets.hpp"
 
-constexpr int32_t kMaxPlausibleObjectCount = 2000000;
+constexpr int kMaxPlausibleObjectCount = 2000000;
 
-int32_t ObjectArray::GetCount()
+int ObjectArray::GetCount()
 {
     uint64_t base = NerineGlobals::GetInstance().GetModuleBase();
 
-    return ReadMemory<int32_t>(base + kGObjectsOffset + 0x8);
+    return ReadMemory<int>(base + g_objectsOffset + 0x8);
 }
 
 uint64_t ObjectArray::GetData()
 {
     uint64_t base = NerineGlobals::GetInstance().GetModuleBase();
 
-    return ReadMemory<uint64_t>(base + kGObjectsOffset);
+    return ReadMemory<uint64_t>(base + g_objectsOffset);
 }
 
-RemoteObject ObjectArray::GetObjectAt(uint64_t data, int32_t index)
+RemoteObject ObjectArray::GetObjectAt(uint64_t data, int index)
 {
     uint64_t obj = ReadMemory<uint64_t>(data + index * 8);
 
@@ -29,7 +29,7 @@ RemoteObject ObjectArray::GetObjectAt(uint64_t data, int32_t index)
 
 std::vector<uint64_t> ObjectArray::GetAllObjectAddresses()
 {
-    int32_t count = GetCount();
+    int count = GetCount();
 
     if (count <= 0 || count > kMaxPlausibleObjectCount)
     {

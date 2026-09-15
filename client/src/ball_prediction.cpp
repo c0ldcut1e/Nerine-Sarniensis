@@ -2,11 +2,11 @@
 
 #include <vector>
 
+#include "SdkHeaders.hpp"
 #include "reflection/ball.hpp"
 #include "reflection/local_player.hpp"
 #include "reflection/projection.hpp"
 #include "reflection/trajectory.hpp"
-#include "SDK_HEADERS/Core_structs.hpp"
 
 #include <imgui.h>
 

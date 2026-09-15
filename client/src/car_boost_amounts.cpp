@@ -3,10 +3,10 @@
 #include <algorithm>
 #include <vector>
 
+#include "SdkHeaders.hpp"
 #include "reflection/car_list.hpp"
 #include "reflection/local_player.hpp"
 #include "reflection/projection.hpp"
-#include "SDK_HEADERS/Core_structs.hpp"
 
 #include <imgui.h>
 
@@ -35,11 +35,6 @@ void CarBoostAmounts::DrawMenu()
 
     ImGui::SliderFloat("Circle Size", &m_circleRadius, 10.0f, 100.0f);
     ImGui::SliderFloat("Circle Height", &m_heightOffset, 50.0f, 300.0f);
-
-    if (ImGui::Button("Log Car Boost Values"))
-    {
-        CarList::Debug();
-    }
 }
 
 void CarBoostAmounts::Render(float screenWidth, float screenHeight)

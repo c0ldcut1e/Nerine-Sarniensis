@@ -45,9 +45,9 @@ bool RemoteObject::IsPendingKillOrBad() const
     return HasAnyFlags(RF_BadObjectFlags);
 }
 
-int32_t RemoteObject::GetNameId() const
+int RemoteObject::GetNameId() const
 {
-    return ReadMemory<int32_t>(m_address + kObjectNameOffset);
+    return ReadMemory<int>(m_address + kObjectNameOffset);
 }
 
 std::string RemoteObject::GetName() const

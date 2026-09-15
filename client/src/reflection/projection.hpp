@@ -2,7 +2,6 @@
 #define PROJECTION_HPP
 
 #include "SdkHeaders.hpp"
-#include "SDK_HEADERS/Core_structs.hpp"
 
 class Projection
 {

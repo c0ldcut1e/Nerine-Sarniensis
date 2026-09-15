@@ -5,15 +5,7 @@
 #include "nerine_memory.hpp"
 #include "offsets.hpp"
 
-#include <fmt/base.h>
-
-constexpr uint64_t kPlayerInputOffset        = 0x5B0;
-constexpr uint64_t kGamepadBindingsOffset    = 0x388;
-constexpr int kMaxGamepadBindings            = 256;
-constexpr int kPlayerBindingSize             = 0x2C;
-constexpr int kPlayerBindingActionNameOffset = 0x0;
-constexpr int kPlayerBindingKeyNameOffset    = 0x8;
-constexpr int kPlayerBindingAxisSignOffset   = 0x10;
+constexpr int kMaxGamepadBindings = 256;
 
 struct RemoteArray
 {
@@ -32,13 +24,13 @@ std::vector<GamepadBinding> InputBindings::GetGamepadBindings()
         return bindings;
     }
 
-    uint64_t playerInput = ReadMemory<uint64_t>(localPlayer.GetAddress() + kPlayerInputOffset);
+    uint64_t playerInput = ReadMemory<uint64_t>(localPlayer.GetAddress() + g_playerInputOffset);
     if (!playerInput)
     {
         return bindings;
     }
 
-    RemoteArray bindingArray = ReadMemory<RemoteArray>(playerInput + kGamepadBindingsOffset);
+    RemoteArray bindingArray = ReadMemory<RemoteArray>(playerInput + g_gamepadBindingsOffset);
     if (!bindingArray.Data || bindingArray.Count <= 0 || bindingArray.Count > kMaxGamepadBindings || bindingArray.Capacity < bindingArray.Count ||
         bindingArray.Capacity > kMaxGamepadBindings)
     {
@@ -48,26 +40,14 @@ std::vector<GamepadBinding> InputBindings::GetGamepadBindings()
     bindings.reserve(bindingArray.Count);
     for (int i = 0; i < bindingArray.Count; i++)
     {
-        uint64_t bindingAddress = bindingArray.Data + i * kPlayerBindingSize;
+        uint64_t bindingAddress = bindingArray.Data + i * g_playerBindingSize;
         GamepadBinding binding;
 
-        binding.Action   = NameTable::Resolve(ReadMemory<int>(bindingAddress + kPlayerBindingActionNameOffset));
-        binding.Key      = NameTable::Resolve(ReadMemory<int>(bindingAddress + kPlayerBindingKeyNameOffset));
-        binding.AxisSign = ReadMemory<uint8_t>(bindingAddress + kPlayerBindingAxisSignOffset);
+        binding.Action   = NameTable::Resolve(ReadMemory<int>(bindingAddress + g_playerBindingActionNameOffset));
+        binding.Key      = NameTable::Resolve(ReadMemory<int>(bindingAddress + g_playerBindingKeyNameOffset));
+        binding.AxisSign = ReadMemory<uint8_t>(bindingAddress + g_playerBindingAxisSignOffset);
         bindings.push_back(binding);
     }
 
     return bindings;
-}
-
-void InputBindings::Debug()
-{
-    std::vector<GamepadBinding> bindings = GetGamepadBindings();
-
-    fmt::println("--- InputBindings::Debug ---");
-    fmt::println("gamepad binding count = {}", bindings.size());
-    for (size_t i = 0; i < bindings.size(); i++)
-    {
-        fmt::println("#{} action '{}' key '{}' axis sign {}", i, bindings[i].Action, bindings[i].Key, bindings[i].AxisSign);
-    }
 }

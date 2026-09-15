@@ -13,15 +13,15 @@ BoostPad::BoostPad(uint64_t address)
 
 FVector BoostPad::GetLocation() const
 {
-    return ReadMemory<FVector>(m_address + kActorLocationOffset);
+    return ReadMemory<FVector>(m_address + g_actorLocationOffset);
 }
 
 uint8_t BoostPad::GetPickupState() const
 {
-    return ReadMemory<uint8_t>(m_address + kPickupPickedUpOffset);
+    return ReadMemory<uint8_t>(m_address + g_pickupPickedUpOffset);
 }
 
 float BoostPad::GetRespawnDelay() const
 {
-    return ReadMemory<float>(m_address + kPickupRespawnDelayOffset);
+    return ReadMemory<float>(m_address + g_pickupRespawnDelayOffset);
 }

@@ -3,6 +3,7 @@
 #include "nerine_globals.hpp"
 #include "nerine_overlay.hpp"
 #include "nerine_utils.hpp"
+#include "reflection/offset_resolver.hpp"
 
 #include <fmt/base.h>
 #include <fmt/core.h>
@@ -13,7 +14,7 @@ int main()
     pid_t pid = GetPidByProcessName("RocketLeague.exe");
     if (pid >= 0)
     {
-        fmt::println(stderr, "Rocket League is already running (pid {}); close it and restart Sarniensis before launching Rocket League", pid);
+        fmt::println(stderr, "Rocket League is already running");
         return 1;
     }
 
@@ -38,6 +39,12 @@ int main()
     fmt::println("Found module base at 0x{:016X}", moduleBase);
 
     NerineGlobals::GetInstance().SetModuleBase(moduleBase);
+
+    fmt::println("Resolving game offsets");
+    while (!OffsetResolver::GetInstance().Resolve())
+    {
+        usleep(250000);
+    }
 
     return overlay.Run();
 }

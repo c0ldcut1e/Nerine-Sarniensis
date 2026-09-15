@@ -9,7 +9,6 @@ class BoostPadList
 {
 public:
     static std::vector<BoostPad> GetAll();
-    static void Debug();
 };
 
 #endif

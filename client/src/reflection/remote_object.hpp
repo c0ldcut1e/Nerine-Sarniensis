@@ -22,7 +22,7 @@ public:
     bool HasAnyFlags(uint64_t flags) const;
     bool IsDefaultObject() const;
     bool IsPendingKillOrBad() const;
-    int32_t GetNameId() const;
+    int GetNameId() const;
     std::string GetName() const;
 
     bool IsValidInstanceOf(uint64_t classAddress) const;

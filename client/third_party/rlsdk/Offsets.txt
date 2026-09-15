@@ -1,0 +1,22 @@
+========================= OFFSETS =========================
+
+Base Address: 0x6FFFFA2D0000
+
+(offset) BuildDate:            0x021DD0F8
+(offset) GPsyonixBuildID:      0x021DD128
+(offset) GMalloc:              0x022E80C0
+(offset) GNames:               0x02418148
+(offset) GObjects:             0x02418190
+
+===================== GENERATION TIME =====================
+
+Initialization:                17.09 seconds
+SDK generation:                3.899 seconds
+
+Total time elapsed:            20.99 seconds
+
+===================== GAME BUILD INFO =====================
+
+GPsyonixBuildID:               260825.79374.526531
+BuildDate:                     Aug 25 2026 22:52:54
+

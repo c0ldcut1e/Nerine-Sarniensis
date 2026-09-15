@@ -5,7 +5,6 @@
 
 #include "SdkHeaders.hpp"
 #include "remote_object.hpp"
-#include "SDK_HEADERS/Core_structs.hpp"
 
 struct BallPhysics
 {
@@ -36,7 +35,6 @@ public:
     std::vector<FPredictedPosition> GetPredictedPositions() const;
 
     static Ball Find();
-    static void Debug();
 };
 
 #endif

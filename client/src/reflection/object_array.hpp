@@ -10,9 +10,9 @@
 class ObjectArray
 {
 public:
-    static int32_t GetCount();
+    static int GetCount();
     static uint64_t GetData();
-    static RemoteObject GetObjectAt(uint64_t data, int32_t index);
+    static RemoteObject GetObjectAt(uint64_t data, int index);
     static std::vector<uint64_t> GetAllObjectAddresses();
     static uint64_t FindClassByName(const std::string &className);
     static RemoteObject FindFirstInstanceOf(uint64_t classAddress);

@@ -5,14 +5,12 @@
 
 #include "SdkHeaders.hpp"
 #include "car.hpp"
-#include "SDK_HEADERS/Core_structs.hpp"
 
 class CarList
 {
 public:
     static std::vector<FVector> GetPositions();
     static std::vector<Car> GetAll();
-    static void Debug();
 };
 
 #endif
