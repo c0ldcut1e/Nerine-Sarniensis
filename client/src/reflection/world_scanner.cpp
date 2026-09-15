@@ -6,6 +6,7 @@
 
 #include "ball.hpp"
 #include "object_array.hpp"
+#include "offset_resolver.hpp"
 #include "remote_object.hpp"
 
 constexpr int kScanIntervalMilliseconds = 50;
@@ -28,22 +29,22 @@ static void ScanLoop()
     {
         if (!g_ballClassAddress)
         {
-            g_ballClassAddress = ObjectArray::FindClassByName("Ball_TA");
+            g_ballClassAddress = OffsetResolver::GetInstance().TryGetClassAddress("Ball_TA");
         }
 
         if (!g_gameEventClassAddress)
         {
-            g_gameEventClassAddress = ObjectArray::FindClassByName("GameEvent_Soccar_TA");
+            g_gameEventClassAddress = OffsetResolver::GetInstance().TryGetClassAddress("GameEvent_Soccar_TA");
         }
 
         if (!g_playerClassAddress)
         {
-            g_playerClassAddress = ObjectArray::FindClassByName("PlayerController_TA");
+            g_playerClassAddress = OffsetResolver::GetInstance().TryGetClassAddress("PlayerController_TA");
         }
 
         if (!g_boostPadClassAddress)
         {
-            g_boostPadClassAddress = ObjectArray::FindClassByName("VehiclePickup_Boost_TA");
+            g_boostPadClassAddress = OffsetResolver::GetInstance().TryGetClassAddress("VehiclePickup_Boost_TA");
         }
 
         std::vector<uint64_t> addresses = ObjectArray::GetAllObjectAddresses();
@@ -52,7 +53,6 @@ static void ScanLoop()
         uint64_t gameEventAddress       = 0;
         uint64_t playerAddress          = 0;
         std::vector<uint64_t> boostPadAddresses;
-
         for (size_t i = 0; i < addresses.size(); i++)
         {
             RemoteObject object(addresses[i]);

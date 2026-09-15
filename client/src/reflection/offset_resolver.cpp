@@ -10,94 +10,52 @@
 #include "nerine_globals.hpp"
 #include "nerine_memory.hpp"
 #include "object_array.hpp"
-#include "offsets.hpp"
+#include "remote_object.hpp"
+#include "ue3_offsets.hpp"
 
 #include "GameDefines.hpp"
 #include "SdkHeaders.hpp"
 
 #include <fmt/core.h>
 
+constexpr size_t kDefaultCacheSizeCap = 128;
+
 uint64_t g_objectsOffset;
 uint64_t g_namesOffset;
 uint64_t g_buildDateOffset;
 uint64_t g_psyonixBuildIdOffset;
-uint64_t g_actorLocationOffset;
-uint64_t g_actorHiddenOffset;
-uint32_t g_actorHiddenFlag;
-uint64_t g_rigidBodyStateOffset;
-uint64_t g_rigidBodyRotationOffset;
-uint64_t g_rigidBodyLocationOffset;
-uint64_t g_rigidBodyLinearVelocityOffset;
-uint64_t g_rigidBodyAngularVelocityOffset;
-uint64_t g_rigidBodyMaxLinearSpeedOffset;
-uint64_t g_rigidBodyMaxAngularSpeedOffset;
-uint64_t g_rigidBodyRollingFrictionOffset;
-uint64_t g_playerCameraOffset;
-uint64_t g_cameraCacheOffset;
-uint64_t g_cameraCachePovOffset;
-uint64_t g_playerCarOffset;
-uint64_t g_carVehicleSimOffset;
-uint64_t g_carMeshOffset;
-uint64_t g_carStateFlagsOffset;
-uint64_t g_carPriOffset;
-uint64_t g_carLocalCollisionOffset;
-uint64_t g_carLocalCollisionExtentOffset;
-uint64_t g_carBoostComponentOffset;
-uint64_t g_vehicleSimWheelsOffset;
-uint64_t g_wheelRadiusOffset;
-uint64_t g_wheelLocalRestPositionOffset;
-uint64_t g_boostMaxAmountOffset;
-uint64_t g_boostCurrentAmountOffset;
-uint64_t g_boostReplicatedAmountOffset;
-uint64_t g_priTeamOffset;
-uint64_t g_priCarOffset;
-uint64_t g_teamIndexOffset;
-uint32_t g_carOnGroundFlag;
-uint32_t g_carDoubleJumpedFlag;
-uint64_t g_primitiveComponentLocalToWorldOffset;
-uint64_t g_ballMagnusCoefficientOffset;
-uint64_t g_ballMagnusMinSpeedOffset;
-uint64_t g_ballAngularVelocityDampingOffset;
-uint64_t g_ballRadiusOffset;
-uint64_t g_ballWorldBounceScaleOffset;
-uint64_t g_ballGravityScaleOffset;
-uint64_t g_ballMaxLinearSpeedScaleOffset;
-uint64_t g_ballAirResistanceOffset;
-uint64_t g_ballMinResistanceVelocityOffset;
-uint64_t g_ballPredictedPositionsOffset;
-uint64_t g_gameEventFlagsOffset;
-uint32_t g_gameEventRoundActiveFlag;
-uint32_t g_gameEventBallHasBeenHitFlag;
-uint64_t g_gameEventCarsOffset;
-uint64_t g_gameEventPrisOffset;
-uint64_t g_pickupRespawnDelayOffset;
-uint64_t g_pickupPickedUpOffset;
-uint64_t g_playerInputOffset;
-uint64_t g_gamepadBindingsOffset;
-uint64_t g_playerBindingSize;
-uint64_t g_playerBindingActionNameOffset;
-uint64_t g_playerBindingKeyNameOffset;
-uint64_t g_playerBindingAxisSignOffset;
-
-constexpr uint64_t kUFieldNextOffset            = 0x60;
-constexpr uint64_t kUStructSuperFieldOffset     = 0x80;
-constexpr uint64_t kUStructChildrenOffset       = 0x88;
-constexpr uint64_t kUPropertyElementSizeOffset  = 0x74;
-constexpr uint64_t kUPropertyOffsetOffset       = 0x98;
-constexpr uint64_t kUStructPropertyStructOffset = 0xC8;
-constexpr uint64_t kUArrayPropertyInnerOffset   = 0xC8;
-constexpr uint64_t kUBoolPropertyBitMaskOffset  = 0xC8;
 
 OffsetResolver::OffsetResolver()
 {
-    m_rocketLeagueOffsetsResolved = false;
-    m_offsetResolveStartTime      = std::chrono::steady_clock::now();
+    m_layoutValidated        = false;
+    m_offsetResolveStartTime = std::chrono::steady_clock::now();
+    m_cacheSizeCap           = kDefaultCacheSizeCap;
 }
 
 OffsetResolver &OffsetResolver::GetInstance()
 {
     static OffsetResolver instance;
     return instance;
+}
+
+uint64_t OffsetResolver::GetGObjectsOffset() const
+{
+    return g_objectsOffset;
+}
+
+uint64_t OffsetResolver::GetGNamesOffset() const
+{
+    return g_namesOffset;
+}
+
+uint64_t OffsetResolver::GetBuildDateOffset() const
+{
+    return g_buildDateOffset;
+}
+
+uint64_t OffsetResolver::GetGPsyonixBuildIdOffset() const
+{
+    return g_psyonixBuildIdOffset;
 }
 
 bool OffsetResolver::Resolve()
@@ -269,7 +227,7 @@ bool OffsetResolver::Resolve()
         return false;
     }
 
-    if (!m_rocketLeagueOffsetsResolved)
+    if (!m_layoutValidated)
     {
         if (std::chrono::steady_clock::now() - m_offsetResolveStartTime >= std::chrono::seconds(60))
         {
@@ -277,275 +235,77 @@ bool OffsetResolver::Resolve()
             exit(EXIT_FAILURE);
         }
 
-        if (!BuildClassAddresses())
+        if (TryGetClassAddress("Actor") == 0)
         {
             return false;
         }
 
         if (!ValidateRlsdkLayout())
         {
-            exit(EXIT_FAILURE);
+            m_classAddresses.erase("Actor");
+            return false;
         }
 
         fmt::println("GObjects: 0x{:X}", g_objectsOffset);
         fmt::println("GNames: 0x{:X}", g_namesOffset);
         fmt::println("BuildDate: 0x{:X}", g_buildDateOffset);
         fmt::println("GPsyonixBuildID: 0x{:X}", g_psyonixBuildIdOffset);
-        ResolveRocketLeagueOffsets();
-        m_rocketLeagueOffsetsResolved = true;
+        m_layoutValidated = true;
     }
 
     return true;
 }
 
-void OffsetResolver::ResolveRocketLeagueOffsets()
+uint64_t OffsetResolver::FindClassAddress(const char *className) const
 {
-    uint64_t actorClass                    = GetClassAddress("Actor");
-    uint64_t rigidBodyActorClass           = GetClassAddress("RBActor_TA");
-    uint64_t playerControllerClass         = GetClassAddress("PlayerController_TA");
-    uint64_t cameraClass                   = GetClassAddress("Camera");
-    uint64_t vehicleClass                  = GetClassAddress("Vehicle_TA");
-    uint64_t vehicleSimClass               = GetClassAddress("VehicleSim_TA");
-    uint64_t wheelClass                    = GetClassAddress("Wheel_TA");
-    uint64_t boostComponentClass           = GetClassAddress("CarComponent_Boost_TA");
-    uint64_t priClass                      = GetClassAddress("PRI_TA");
-    uint64_t teamClass                     = GetClassAddress("Team_TA");
-    uint64_t primitiveClass                = GetClassAddress("PrimitiveComponent");
-    uint64_t ballClass                     = GetClassAddress("Ball_TA");
-    uint64_t gameEventClass                = GetClassAddress("GameEvent_TA");
-    uint64_t soccarGameEventClass          = GetClassAddress("GameEvent_Soccar_TA");
-    uint64_t pickupClass                   = GetClassAddress("VehiclePickup_TA");
-    uint64_t playerInputClass              = GetClassAddress("PlayerInput_TA");
-    g_actorLocationOffset                  = GetPropertyOffset(actorClass, "Location");
-    g_actorHiddenOffset                    = GetPropertyOffset(actorClass, "bHidden");
-    g_actorHiddenFlag                      = GetBoolMask(actorClass, "bHidden");
-    g_rigidBodyStateOffset                 = GetPropertyOffset(rigidBodyActorClass, "RBState");
-    g_rigidBodyRotationOffset              = GetStructPropertyOffset(rigidBodyActorClass, "RBState", "Quaternion");
-    g_rigidBodyLocationOffset              = GetStructPropertyOffset(rigidBodyActorClass, "RBState", "Location");
-    g_rigidBodyLinearVelocityOffset        = GetStructPropertyOffset(rigidBodyActorClass, "RBState", "LinearVelocity");
-    g_rigidBodyAngularVelocityOffset       = GetStructPropertyOffset(rigidBodyActorClass, "RBState", "AngularVelocity");
-    g_rigidBodyMaxLinearSpeedOffset        = GetPropertyOffset(rigidBodyActorClass, "MaxLinearSpeed");
-    g_rigidBodyMaxAngularSpeedOffset       = GetPropertyOffset(rigidBodyActorClass, "MaxAngularSpeed");
-    g_rigidBodyRollingFrictionOffset       = GetPropertyOffset(rigidBodyActorClass, "RollingFriction");
-    g_playerCameraOffset                   = GetPropertyOffset(playerControllerClass, "PlayerCamera");
-    g_cameraCacheOffset                    = GetPropertyOffset(cameraClass, "CameraCache");
-    g_cameraCachePovOffset                 = GetStructPropertyOffset(cameraClass, "CameraCache", "POV");
-    g_playerCarOffset                      = GetPropertyOffset(playerControllerClass, "Car");
-    g_carVehicleSimOffset                  = GetPropertyOffset(vehicleClass, "VehicleSim");
-    g_carMeshOffset                        = GetPropertyOffset(vehicleClass, "CarMesh");
-    g_carStateFlagsOffset                  = GetPropertyOffset(vehicleClass, "bOnGround");
-    g_carPriOffset                         = GetPropertyOffset(vehicleClass, "PRI");
-    g_carLocalCollisionOffset              = GetPropertyOffset(vehicleClass, "LocalCollisionOffset");
-    g_carLocalCollisionExtentOffset        = GetPropertyOffset(vehicleClass, "LocalCollisionExtent");
-    g_carBoostComponentOffset              = GetPropertyOffset(vehicleClass, "BoostComponent");
-    g_vehicleSimWheelsOffset               = GetPropertyOffset(vehicleSimClass, "Wheels");
-    g_wheelRadiusOffset                    = GetPropertyOffset(wheelClass, "WheelRadius");
-    g_wheelLocalRestPositionOffset         = GetPropertyOffset(wheelClass, "LocalRestPosition");
-    g_boostMaxAmountOffset                 = GetPropertyOffset(boostComponentClass, "MaxBoostAmount");
-    g_boostCurrentAmountOffset             = GetPropertyOffset(boostComponentClass, "CurrentBoostAmount");
-    g_boostReplicatedAmountOffset          = GetPropertyOffset(boostComponentClass, "ReplicatedBoostAmount");
-    g_priTeamOffset                        = GetPropertyOffset(priClass, "Team");
-    g_priCarOffset                         = GetPropertyOffset(priClass, "Car");
-    g_teamIndexOffset                      = GetPropertyOffset(teamClass, "TeamIndex");
-    g_carOnGroundFlag                      = GetBoolMask(vehicleClass, "bOnGround");
-    g_carDoubleJumpedFlag                  = GetBoolMask(vehicleClass, "bDoubleJumped");
-    g_primitiveComponentLocalToWorldOffset = GetPropertyOffset(primitiveClass, "LocalToWorld");
-    g_ballMagnusCoefficientOffset          = GetPropertyOffset(ballClass, "MagnusCoefficient");
-    g_ballMagnusMinSpeedOffset             = GetPropertyOffset(ballClass, "MagnusMinSpeed");
-    g_ballAngularVelocityDampingOffset     = GetPropertyOffset(ballClass, "AngularVelocityDamping");
-    g_ballRadiusOffset                     = GetPropertyOffset(ballClass, "Radius");
-    g_ballWorldBounceScaleOffset           = GetPropertyOffset(ballClass, "ReplicatedWorldBounceScale");
-    g_ballGravityScaleOffset               = GetPropertyOffset(ballClass, "ReplicatedBallGravityScale");
-    g_ballMaxLinearSpeedScaleOffset        = GetPropertyOffset(ballClass, "ReplicatedBallMaxLinearSpeedScale");
-    g_ballAirResistanceOffset              = GetPropertyOffset(ballClass, "AirResistance");
-    g_ballMinResistanceVelocityOffset      = GetPropertyOffset(ballClass, "MinResistanceVelocity");
-    g_ballPredictedPositionsOffset         = GetPropertyOffset(ballClass, "PredictedPositions");
-    g_gameEventFlagsOffset                 = GetPropertyOffset(soccarGameEventClass, "bRoundActive");
-    g_gameEventRoundActiveFlag             = GetBoolMask(soccarGameEventClass, "bRoundActive");
-    g_gameEventBallHasBeenHitFlag          = GetBoolMask(soccarGameEventClass, "bBallHasBeenHit");
-    g_gameEventCarsOffset                  = GetPropertyOffset(gameEventClass, "Cars");
-    g_gameEventPrisOffset                  = GetPropertyOffset(gameEventClass, "PRIs");
-    g_pickupRespawnDelayOffset             = GetPropertyOffset(pickupClass, "RespawnDelay");
-    g_pickupPickedUpOffset =
-            GetPropertyOffset(pickupClass, "NewReplicatedPickupData") + GetStructPropertyOffset(pickupClass, "NewReplicatedPickupData", "PickedUp");
-    g_playerInputOffset             = GetPropertyOffset(playerControllerClass, "PlayerInput");
-    g_gamepadBindingsOffset         = GetPropertyOffset(playerInputClass, "GamepadBindings");
-    g_playerBindingSize             = GetArrayStructElementSize(playerInputClass, "GamepadBindings");
-    g_playerBindingActionNameOffset = GetArrayStructPropertyOffset(playerInputClass, "GamepadBindings", "Action");
-    g_playerBindingKeyNameOffset    = GetArrayStructPropertyOffset(playerInputClass, "GamepadBindings", "Key");
-    g_playerBindingAxisSignOffset   = GetArrayStructPropertyOffset(playerInputClass, "GamepadBindings", "AxisSign");
-
-    const char *offsetNames[] = {"g_actorLocationOffset",
-                                 "g_actorHiddenOffset",
-                                 "g_actorHiddenFlag",
-                                 "g_rigidBodyStateOffset",
-                                 "g_rigidBodyRotationOffset",
-                                 "g_rigidBodyLocationOffset",
-                                 "g_rigidBodyLinearVelocityOffset",
-                                 "g_rigidBodyAngularVelocityOffset",
-                                 "g_rigidBodyMaxLinearSpeedOffset",
-                                 "g_rigidBodyMaxAngularSpeedOffset",
-                                 "g_rigidBodyRollingFrictionOffset",
-                                 "g_playerCameraOffset",
-                                 "g_cameraCacheOffset",
-                                 "g_cameraCachePovOffset",
-                                 "g_playerCarOffset",
-                                 "g_carVehicleSimOffset",
-                                 "g_carMeshOffset",
-                                 "g_carStateFlagsOffset",
-                                 "g_carPriOffset",
-                                 "g_carLocalCollisionOffset",
-                                 "g_carLocalCollisionExtentOffset",
-                                 "g_carBoostComponentOffset",
-                                 "g_vehicleSimWheelsOffset",
-                                 "g_wheelRadiusOffset",
-                                 "g_wheelLocalRestPositionOffset",
-                                 "g_boostMaxAmountOffset",
-                                 "g_boostCurrentAmountOffset",
-                                 "g_boostReplicatedAmountOffset",
-                                 "g_priTeamOffset",
-                                 "g_priCarOffset",
-                                 "g_teamIndexOffset",
-                                 "g_carOnGroundFlag",
-                                 "g_carDoubleJumpedFlag",
-                                 "g_primitiveComponentLocalToWorldOffset",
-                                 "g_ballMagnusCoefficientOffset",
-                                 "g_ballMagnusMinSpeedOffset",
-                                 "g_ballAngularVelocityDampingOffset",
-                                 "g_ballRadiusOffset",
-                                 "g_ballWorldBounceScaleOffset",
-                                 "g_ballGravityScaleOffset",
-                                 "g_ballMaxLinearSpeedScaleOffset",
-                                 "g_ballAirResistanceOffset",
-                                 "g_ballMinResistanceVelocityOffset",
-                                 "g_ballPredictedPositionsOffset",
-                                 "g_gameEventFlagsOffset",
-                                 "g_gameEventRoundActiveFlag",
-                                 "g_gameEventBallHasBeenHitFlag",
-                                 "g_gameEventCarsOffset",
-                                 "g_gameEventPrisOffset",
-                                 "g_pickupRespawnDelayOffset",
-                                 "g_pickupPickedUpOffset",
-                                 "g_playerInputOffset",
-                                 "g_gamepadBindingsOffset",
-                                 "g_playerBindingSize",
-                                 "g_playerBindingActionNameOffset",
-                                 "g_playerBindingKeyNameOffset",
-                                 "g_playerBindingAxisSignOffset"};
-    uint64_t offsetValues[]   = {g_actorLocationOffset,
-                                 g_actorHiddenOffset,
-                                 (uint64_t) g_actorHiddenFlag,
-                                 g_rigidBodyStateOffset,
-                                 g_rigidBodyRotationOffset,
-                                 g_rigidBodyLocationOffset,
-                                 g_rigidBodyLinearVelocityOffset,
-                                 g_rigidBodyAngularVelocityOffset,
-                                 g_rigidBodyMaxLinearSpeedOffset,
-                                 g_rigidBodyMaxAngularSpeedOffset,
-                                 g_rigidBodyRollingFrictionOffset,
-                                 g_playerCameraOffset,
-                                 g_cameraCacheOffset,
-                                 g_cameraCachePovOffset,
-                                 g_playerCarOffset,
-                                 g_carVehicleSimOffset,
-                                 g_carMeshOffset,
-                                 g_carStateFlagsOffset,
-                                 g_carPriOffset,
-                                 g_carLocalCollisionOffset,
-                                 g_carLocalCollisionExtentOffset,
-                                 g_carBoostComponentOffset,
-                                 g_vehicleSimWheelsOffset,
-                                 g_wheelRadiusOffset,
-                                 g_wheelLocalRestPositionOffset,
-                                 g_boostMaxAmountOffset,
-                                 g_boostCurrentAmountOffset,
-                                 g_boostReplicatedAmountOffset,
-                                 g_priTeamOffset,
-                                 g_priCarOffset,
-                                 g_teamIndexOffset,
-                                 (uint64_t) g_carOnGroundFlag,
-                                 (uint64_t) g_carDoubleJumpedFlag,
-                                 g_primitiveComponentLocalToWorldOffset,
-                                 g_ballMagnusCoefficientOffset,
-                                 g_ballMagnusMinSpeedOffset,
-                                 g_ballAngularVelocityDampingOffset,
-                                 g_ballRadiusOffset,
-                                 g_ballWorldBounceScaleOffset,
-                                 g_ballGravityScaleOffset,
-                                 g_ballMaxLinearSpeedScaleOffset,
-                                 g_ballAirResistanceOffset,
-                                 g_ballMinResistanceVelocityOffset,
-                                 g_ballPredictedPositionsOffset,
-                                 g_gameEventFlagsOffset,
-                                 (uint64_t) g_gameEventRoundActiveFlag,
-                                 (uint64_t) g_gameEventBallHasBeenHitFlag,
-                                 g_gameEventCarsOffset,
-                                 g_gameEventPrisOffset,
-                                 g_pickupRespawnDelayOffset,
-                                 g_pickupPickedUpOffset,
-                                 g_playerInputOffset,
-                                 g_gamepadBindingsOffset,
-                                 g_playerBindingSize,
-                                 g_playerBindingActionNameOffset,
-                                 g_playerBindingKeyNameOffset,
-                                 g_playerBindingAxisSignOffset};
-    for (size_t i = 0; i < sizeof(offsetNames) / sizeof(offsetNames[0]); i++)
-    {
-        fmt::println("{}: 0x{:X}", offsetNames[i], offsetValues[i]);
-    }
-}
-
-bool OffsetResolver::BuildClassAddresses()
-{
-    const char *classNames[]        = {"Actor",
-                                       "RBActor_TA",
-                                       "PlayerController_TA",
-                                       "Camera",
-                                       "Vehicle_TA",
-                                       "VehicleSim_TA",
-                                       "Wheel_TA",
-                                       "CarComponent_Boost_TA",
-                                       "PRI_TA",
-                                       "Team_TA",
-                                       "PrimitiveComponent",
-                                       "Ball_TA",
-                                       "GameEvent_TA",
-                                       "GameEvent_Soccar_TA",
-                                       "VehiclePickup_TA",
-                                       "PlayerInput_TA"};
     std::vector<uint64_t> addresses = ObjectArray::GetAllObjectAddresses();
     for (size_t i = 0; i < addresses.size(); i++)
     {
         RemoteObject object(addresses[i]);
-        if (!object.IsValidAddress())
+        if (!object.IsValidAddress() || object.GetName() != className)
         {
             continue;
         }
 
-        std::string name = object.GetName();
-        for (size_t classIndex = 0; classIndex < sizeof(classNames) / sizeof(classNames[0]); classIndex++)
+        RemoteObject metaClass(object.GetClassAddress());
+        if (!metaClass.IsValidAddress() || metaClass.GetName() != "Class")
         {
-            if (name == classNames[classIndex])
-            {
-                m_classAddresses.emplace(name, object.GetAddress());
-                break;
-            }
+            continue;
         }
+
+        return object.GetAddress();
     }
 
-    return m_classAddresses.size() == sizeof(classNames) / sizeof(classNames[0]);
+    return 0;
 }
 
-uint64_t OffsetResolver::GetClassAddress(const char *className) const
+uint64_t OffsetResolver::TryGetClassAddress(const char *className)
 {
-    auto classAddress = m_classAddresses.find(className);
-    if (classAddress == m_classAddresses.end())
+    auto cachedAddress = m_classAddresses.find(className);
+    if (cachedAddress != m_classAddresses.end())
+    {
+        return cachedAddress->second;
+    }
+
+    uint64_t classAddress = FindClassAddress(className);
+    if (classAddress != 0)
+    {
+        m_classAddresses.emplace(className, classAddress);
+    }
+
+    return classAddress;
+}
+
+uint64_t OffsetResolver::GetClassAddress(const char *className)
+{
+    uint64_t classAddress = TryGetClassAddress(className);
+    if (classAddress == 0)
     {
         fmt::println(stderr, "Failed to resolve class {}", className);
         exit(EXIT_FAILURE);
     }
 
-    return classAddress->second;
+    return classAddress;
 }
 
 uint64_t OffsetResolver::FindPropertyAddress(uint64_t classAddress, const char *propertyName) const
@@ -679,7 +439,178 @@ uint32_t OffsetResolver::GetBoolMask(uint64_t classAddress, const char *property
     return bitMask;
 }
 
-bool OffsetResolver::ValidateRlsdkLayout() const
+uint64_t OffsetResolver::GetPropertyOffsetCached(uint64_t classAddress, const char *propertyName)
+{
+    std::lock_guard<std::mutex> lock(m_offsetCacheMutex);
+    if (m_cacheSizeCap == 0)
+    {
+        return GetPropertyOffset(classAddress, propertyName);
+    }
+
+    std::string cacheKey = GetCacheKey(classAddress, propertyName, nullptr);
+    auto cachedOffset    = m_propertyOffsetCache.find(cacheKey);
+    if (cachedOffset != m_propertyOffsetCache.end())
+    {
+        return cachedOffset->second;
+    }
+
+    InvalidateCachedOffsetsIfNeeded();
+    uint64_t offset = GetPropertyOffset(classAddress, propertyName);
+    m_propertyOffsetCache.emplace(cacheKey, offset);
+    fmt::println("Resolved property offset 0x{:X}.{}: 0x{:X}", classAddress, propertyName, offset);
+    return offset;
+}
+
+uint64_t OffsetResolver::GetStructPropertyOffsetCached(uint64_t classAddress, const char *propertyName, const char *memberName)
+{
+    std::lock_guard<std::mutex> lock(m_offsetCacheMutex);
+    if (m_cacheSizeCap == 0)
+    {
+        return GetStructPropertyOffset(classAddress, propertyName, memberName);
+    }
+
+    std::string cacheKey = GetCacheKey(classAddress, propertyName, memberName);
+    auto cachedOffset    = m_structPropertyOffsetCache.find(cacheKey);
+    if (cachedOffset != m_structPropertyOffsetCache.end())
+    {
+        return cachedOffset->second;
+    }
+
+    InvalidateCachedOffsetsIfNeeded();
+    uint64_t offset = GetStructPropertyOffset(classAddress, propertyName, memberName);
+    m_structPropertyOffsetCache.emplace(cacheKey, offset);
+    fmt::println("Resolved struct property offset 0x{:X}.{}.{}, 0x{:X}", classAddress, propertyName, memberName, offset);
+    return offset;
+}
+
+uint64_t OffsetResolver::GetArrayStructPropertyOffsetCached(uint64_t classAddress, const char *propertyName, const char *memberName)
+{
+    std::lock_guard<std::mutex> lock(m_offsetCacheMutex);
+    if (m_cacheSizeCap == 0)
+    {
+        return GetArrayStructPropertyOffset(classAddress, propertyName, memberName);
+    }
+
+    std::string cacheKey = GetCacheKey(classAddress, propertyName, memberName);
+    auto cachedOffset    = m_arrayStructPropertyOffsetCache.find(cacheKey);
+    if (cachedOffset != m_arrayStructPropertyOffsetCache.end())
+    {
+        return cachedOffset->second;
+    }
+
+    InvalidateCachedOffsetsIfNeeded();
+    uint64_t offset = GetArrayStructPropertyOffset(classAddress, propertyName, memberName);
+    m_arrayStructPropertyOffsetCache.emplace(cacheKey, offset);
+    fmt::println("Resolved array struct property offset 0x{:X}.{}.{}, 0x{:X}", classAddress, propertyName, memberName, offset);
+    return offset;
+}
+
+uint64_t OffsetResolver::GetArrayStructElementSizeCached(uint64_t classAddress, const char *propertyName)
+{
+    std::lock_guard<std::mutex> lock(m_offsetCacheMutex);
+    if (m_cacheSizeCap == 0)
+    {
+        return GetArrayStructElementSize(classAddress, propertyName);
+    }
+
+    std::string cacheKey = GetCacheKey(classAddress, propertyName, nullptr);
+    auto cachedOffset    = m_arrayStructElementSizeCache.find(cacheKey);
+    if (cachedOffset != m_arrayStructElementSizeCache.end())
+    {
+        return cachedOffset->second;
+    }
+
+    InvalidateCachedOffsetsIfNeeded();
+    uint64_t elementSize = GetArrayStructElementSize(classAddress, propertyName);
+    m_arrayStructElementSizeCache.emplace(cacheKey, elementSize);
+    fmt::println("Resolved array struct element size 0x{:X}.{}: 0x{:X}", classAddress, propertyName, elementSize);
+    return elementSize;
+}
+
+uint32_t OffsetResolver::GetBoolMaskCached(uint64_t classAddress, const char *propertyName)
+{
+    std::lock_guard<std::mutex> lock(m_offsetCacheMutex);
+    if (m_cacheSizeCap == 0)
+    {
+        return GetBoolMask(classAddress, propertyName);
+    }
+
+    std::string cacheKey = GetCacheKey(classAddress, propertyName, nullptr);
+    auto cachedMask      = m_boolMaskCache.find(cacheKey);
+    if (cachedMask != m_boolMaskCache.end())
+    {
+        return cachedMask->second;
+    }
+
+    InvalidateCachedOffsetsIfNeeded();
+    uint32_t bitMask = GetBoolMask(classAddress, propertyName);
+    m_boolMaskCache.emplace(cacheKey, bitMask);
+    fmt::println("Resolved bool mask 0x{:X}.{}: 0x{:X}", classAddress, propertyName, bitMask);
+    return bitMask;
+}
+
+void OffsetResolver::SetCacheSizeCap(size_t cacheSizeCap)
+{
+    std::lock_guard<std::mutex> lock(m_offsetCacheMutex);
+    m_cacheSizeCap = cacheSizeCap;
+    if (m_cacheSizeCap == 0 || GetCachedOffsetCount() > m_cacheSizeCap)
+    {
+        InvalidateCachedOffsetsUnsafe();
+    }
+}
+
+void OffsetResolver::InvalidateCachedOffsets()
+{
+    std::lock_guard<std::mutex> lock(m_offsetCacheMutex);
+    InvalidateCachedOffsetsUnsafe();
+}
+
+void OffsetResolver::InvalidateCachedOffsetsUnsafe()
+{
+    m_propertyOffsetCache.clear();
+    m_propertyOffsetCache.rehash(0);
+    m_structPropertyOffsetCache.clear();
+    m_structPropertyOffsetCache.rehash(0);
+    m_arrayStructPropertyOffsetCache.clear();
+    m_arrayStructPropertyOffsetCache.rehash(0);
+    m_arrayStructElementSizeCache.clear();
+    m_arrayStructElementSizeCache.rehash(0);
+    m_boolMaskCache.clear();
+    m_boolMaskCache.rehash(0);
+}
+
+std::string OffsetResolver::GetCacheKey(uint64_t classAddress, const char *propertyName, const char *memberName) const
+{
+    std::string cacheKey = std::to_string(classAddress);
+    cacheKey += ':';
+    cacheKey += propertyName;
+    if (memberName)
+    {
+        cacheKey += ':';
+        cacheKey += memberName;
+    }
+
+    return cacheKey;
+}
+
+size_t OffsetResolver::GetCachedOffsetCount() const
+{
+    return m_propertyOffsetCache.size() + m_structPropertyOffsetCache.size() + m_arrayStructPropertyOffsetCache.size() +
+           m_arrayStructElementSizeCache.size() + m_boolMaskCache.size();
+}
+
+void OffsetResolver::InvalidateCachedOffsetsIfNeeded()
+{
+    if (GetCachedOffsetCount() < m_cacheSizeCap)
+    {
+        return;
+    }
+
+    fmt::println("Offset cache cap of {} reached, invalidating cached offsets", m_cacheSizeCap);
+    InvalidateCachedOffsetsUnsafe();
+}
+
+bool OffsetResolver::ValidateRlsdkLayout()
 {
     uint64_t actorClassAddress = GetClassAddress("Actor");
     uint64_t classAddress      = ReadMemory<uint64_t>(actorClassAddress + kObjectClassOffset);

@@ -3,7 +3,7 @@
 #include "GameDefines.hpp"
 #include "name_table.hpp"
 #include "nerine_memory.hpp"
-#include "offsets.hpp"
+#include "ue3_offsets.hpp"
 
 RemoteObject::RemoteObject()
 {

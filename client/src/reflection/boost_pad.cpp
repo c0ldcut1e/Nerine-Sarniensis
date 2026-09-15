@@ -1,7 +1,7 @@
 #include "boost_pad.hpp"
 
 #include "nerine_memory.hpp"
-#include "offsets.hpp"
+#include "offset_resolver.hpp"
 
 BoostPad::BoostPad()
 {}
@@ -13,15 +13,22 @@ BoostPad::BoostPad(uint64_t address)
 
 FVector BoostPad::GetLocation() const
 {
-    return ReadMemory<FVector>(m_address + g_actorLocationOffset);
+    OffsetResolver &offsetResolver = OffsetResolver::GetInstance();
+    uint64_t actorClass            = offsetResolver.GetClassAddress("Actor");
+    return ReadMemory<FVector>(m_address + offsetResolver.GetPropertyOffsetCached(actorClass, "Location"));
 }
 
 uint8_t BoostPad::GetPickupState() const
 {
-    return ReadMemory<uint8_t>(m_address + g_pickupPickedUpOffset);
+    OffsetResolver &offsetResolver = OffsetResolver::GetInstance();
+    uint64_t pickupClass           = offsetResolver.GetClassAddress("VehiclePickup_TA");
+    return ReadMemory<uint8_t>(m_address + offsetResolver.GetPropertyOffsetCached(pickupClass, "NewReplicatedPickupData") +
+                               offsetResolver.GetStructPropertyOffsetCached(pickupClass, "NewReplicatedPickupData", "PickedUp"));
 }
 
 float BoostPad::GetRespawnDelay() const
 {
-    return ReadMemory<float>(m_address + g_pickupRespawnDelayOffset);
+    OffsetResolver &offsetResolver = OffsetResolver::GetInstance();
+    uint64_t pickupClass           = offsetResolver.GetClassAddress("VehiclePickup_TA");
+    return ReadMemory<float>(m_address + offsetResolver.GetPropertyOffsetCached(pickupClass, "RespawnDelay"));
 }
