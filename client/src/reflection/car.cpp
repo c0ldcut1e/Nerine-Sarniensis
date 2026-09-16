@@ -12,7 +12,6 @@ constexpr int kMaxPlausibleWheelCount = 8;
 struct CarStaticData
 {
     bool valid;
-    int team;
     std::string playerName;
     FVector collisionExtent;
     FVector collisionOffset;
@@ -31,36 +30,45 @@ static CarStaticData ReadStaticData(uint64_t address)
     uint64_t vehicleSimClass       = offsetResolver->GetClassAddress("VehicleSim_TA");
     uint64_t wheelClass            = offsetResolver->GetClassAddress("Wheel_TA");
     uint64_t priClass              = offsetResolver->GetClassAddress("PRI_TA");
-    uint64_t teamClass             = offsetResolver->GetClassAddress("Team_TA");
     uint64_t pri                   = ReadMemory<uint64_t>(address + offsetResolver->GetPropertyOffsetCached(vehicleClass, "PRI"));
     uint64_t team                  = ReadMemory<uint64_t>(pri + offsetResolver->GetPropertyOffsetCached(priClass, "Team"));
     uint64_t vehicleSim            = ReadMemory<uint64_t>(address + offsetResolver->GetPropertyOffsetCached(vehicleClass, "VehicleSim"));
     uint64_t wheelsOffset          = offsetResolver->GetPropertyOffsetCached(vehicleSimClass, "Wheels");
     uint64_t wheels                = ReadMemory<uint64_t>(vehicleSim + wheelsOffset);
+    int wheelCount                 = ReadMemory<int>(vehicleSim + wheelsOffset + sizeof(uint64_t));
 
     CarStaticData data;
-    data.valid           = false;
-    data.team            = ReadMemory<int>(team + offsetResolver->GetPropertyOffsetCached(teamClass, "TeamIndex"));
-    data.playerName      = ReadFString(pri + offsetResolver->GetPropertyOffsetCached(priClass, "PlayerName"));
-    data.collisionExtent = ReadMemory<FVector>(address + offsetResolver->GetPropertyOffsetCached(vehicleClass, "LocalCollisionExtent"));
-    data.collisionOffset = ReadMemory<FVector>(address + offsetResolver->GetPropertyOffsetCached(vehicleClass, "LocalCollisionOffset"));
-    data.wheelCount      = ReadMemory<int>(vehicleSim + wheelsOffset + sizeof(uint64_t));
-
-    if (data.wheelCount < 0 || data.wheelCount > kMaxPlausibleWheelCount)
+    data.valid      = false;
+    data.wheelCount = 0;
+    if (!pri || !team || !vehicleSim || !wheels || wheelCount <= 0 || wheelCount > kMaxPlausibleWheelCount)
     {
-        data.wheelCount = 0;
         return data;
     }
 
-    data.valid = pri != 0 && team != 0 && !data.playerName.empty();
+    data.playerName      = ReadFString(pri + offsetResolver->GetPropertyOffsetCached(priClass, "PlayerName"));
+    data.collisionExtent = ReadMemory<FVector>(address + offsetResolver->GetPropertyOffsetCached(vehicleClass, "LocalCollisionExtent"));
+    data.collisionOffset = ReadMemory<FVector>(address + offsetResolver->GetPropertyOffsetCached(vehicleClass, "LocalCollisionOffset"));
+    if (data.playerName.empty() || data.collisionExtent.X <= 0.0f || data.collisionExtent.Y <= 0.0f || data.collisionExtent.Z <= 0.0f)
+    {
+        return data;
+    }
 
-    for (int i = 0; i < data.wheelCount; i++)
+    for (int i = 0; i < wheelCount; i++)
     {
         uint64_t wheel = ReadMemory<uint64_t>(wheels + i * sizeof(uint64_t));
+        if (!wheel)
+        {
+            data.wheelRestPositions.clear();
+            data.wheelRadii.clear();
+            return data;
+        }
+
         data.wheelRestPositions.push_back(ReadMemory<FVector>(wheel + offsetResolver->GetPropertyOffsetCached(wheelClass, "LocalRestPosition")));
         data.wheelRadii.push_back(ReadMemory<float>(wheel + offsetResolver->GetPropertyOffsetCached(wheelClass, "WheelRadius")));
     }
 
+    data.wheelCount = wheelCount;
+    data.valid      = true;
     return data;
 }
 
@@ -168,7 +176,13 @@ float Car::GetBoostAmount() const
 
 int Car::GetTeam() const
 {
-    return GetStaticData(m_address).team;
+    OffsetResolver *offsetResolver = OffsetResolver::GetInstance();
+    uint64_t vehicleClass          = offsetResolver->GetClassAddress("Vehicle_TA");
+    uint64_t priClass              = offsetResolver->GetClassAddress("PRI_TA");
+    uint64_t teamClass             = offsetResolver->GetClassAddress("Team_TA");
+    uint64_t pri                   = ReadMemory<uint64_t>(m_address + offsetResolver->GetPropertyOffsetCached(vehicleClass, "PRI"));
+    uint64_t team                  = ReadMemory<uint64_t>(pri + offsetResolver->GetPropertyOffsetCached(priClass, "Team"));
+    return ReadMemory<int>(team + offsetResolver->GetPropertyOffsetCached(teamClass, "TeamIndex"));
 }
 
 bool Car::IsOnGround() const

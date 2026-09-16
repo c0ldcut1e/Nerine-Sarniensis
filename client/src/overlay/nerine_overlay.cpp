@@ -6,6 +6,28 @@
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 
+constexpr guint kBackMouseButton    = 8;
+constexpr guint kForwardMouseButton = 9;
+
+static int GetImGuiMouseButton(guint button)
+{
+    switch (button)
+    {
+        case GDK_BUTTON_PRIMARY:
+            return ImGuiMouseButton_Left;
+        case GDK_BUTTON_SECONDARY:
+            return ImGuiMouseButton_Right;
+        case GDK_BUTTON_MIDDLE:
+            return ImGuiMouseButton_Middle;
+        case kBackMouseButton:
+            return 3;
+        case kForwardMouseButton:
+            return 4;
+    }
+
+    return -1;
+}
+
 static gboolean OnFrameTick(GtkWidget *widget, GdkFrameClock *frameClock, gpointer data)
 {
     (void) frameClock;
@@ -301,8 +323,14 @@ void NerineOverlay::OnPressed(GtkGestureClick *gesture, gint nPress, gdouble x, 
         return;
     }
 
+    int button = GetImGuiMouseButton(gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)));
+    if (button < 0)
+    {
+        return;
+    }
+
     ImGui::GetIO().AddMousePosEvent(x, y);
-    ImGui::GetIO().AddMouseButtonEvent((int) gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)) - 1, true);
+    ImGui::GetIO().AddMouseButtonEvent(button, true);
 }
 
 void NerineOverlay::OnReleased(GtkGestureClick *gesture, gint nPress, gdouble x, gdouble y, gpointer data)
@@ -315,8 +343,14 @@ void NerineOverlay::OnReleased(GtkGestureClick *gesture, gint nPress, gdouble x,
         return;
     }
 
+    int button = GetImGuiMouseButton(gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)));
+    if (button < 0)
+    {
+        return;
+    }
+
     ImGui::GetIO().AddMousePosEvent(x, y);
-    ImGui::GetIO().AddMouseButtonEvent((int) gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)) - 1, false);
+    ImGui::GetIO().AddMouseButtonEvent(button, false);
 }
 
 void NerineOverlay::OnMotion(GtkEventControllerMotion *controller, gdouble x, gdouble y, gpointer data)

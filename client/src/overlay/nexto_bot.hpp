@@ -2,6 +2,7 @@
 #define NEXTO_BOT_HPP
 
 #include <array>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <torch/script.h>
@@ -64,6 +65,8 @@ private:
     int m_ticks;
     int m_kickoffIndex;
     int m_previousPhysicsFrame;
+    int m_loggedTeam;
+    uint64_t m_loggedCarAddress;
     bool m_matchActive;
     bool m_botInputActive;
     bool m_enabled;

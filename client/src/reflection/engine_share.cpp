@@ -1,5 +1,6 @@
 #include "engine_share.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <vector>
 
@@ -9,6 +10,7 @@
 #include "remote_object.hpp"
 
 static uint64_t g_engineShareAddress;
+static std::chrono::steady_clock::time_point g_lastSearch;
 
 int EngineShare::GetPhysicsFrame()
 {
@@ -21,6 +23,12 @@ int EngineShare::GetPhysicsFrame()
 
     if (!RemoteObject(g_engineShareAddress).IsValidInstanceOf(engineShareClass))
     {
+        if (std::chrono::steady_clock::now() - g_lastSearch < std::chrono::seconds(1))
+        {
+            return 0;
+        }
+
+        g_lastSearch                  = std::chrono::steady_clock::now();
         g_engineShareAddress          = 0;
         std::vector<uint64_t> objects = ObjectArray::GetAllObjectAddresses();
         for (size_t i = 0; i < objects.size(); i++)

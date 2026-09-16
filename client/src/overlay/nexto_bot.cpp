@@ -1,5 +1,6 @@
 #include "nexto_bot.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 
@@ -41,13 +42,15 @@ constexpr NextoKickoffStep kKickoffSteps[] = {
         {4, {1.0f, 0.8f, -0.7f, 0.8f, 0.0f, 1.0f, 1.0f, 0.0f}}, {52, {1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f}},
         {40, {1.0f, 0.0f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f}}};
 
-constexpr float kKickoffTakerMargin  = 10.0f;
-constexpr int kKickoffIndexUndecided = -1;
-constexpr int kKickoffIndexNotTaker  = -2;
-constexpr int kTickSkip              = 8;
-constexpr int kMaxTicksElapsed       = 30;
-constexpr int kAxisSignPositive      = 1;
-constexpr int kAxisSignNegative      = 2;
+constexpr float kKickoffTakerMargin     = 10.0f;
+constexpr int kKickoffIndexUndecided    = -1;
+constexpr int kKickoffIndexNotTaker     = -2;
+constexpr int kTickSkip                 = 8;
+constexpr int kMaxTicksElapsed          = 30;
+constexpr int kMaxKickoffTicksPerUpdate = 4;
+constexpr int kWarmupPlayerCount        = 2;
+constexpr int kAxisSignPositive         = 1;
+constexpr int kAxisSignNegative         = 2;
 
 NextoBot::NextoBot()
 {
@@ -56,6 +59,8 @@ NextoBot::NextoBot()
     m_ticks                = kTickSkip;
     m_kickoffIndex         = kKickoffIndexUndecided;
     m_previousPhysicsFrame = 0;
+    m_loggedTeam           = -1;
+    m_loggedCarAddress     = 0;
     m_matchActive          = false;
     m_botInputActive       = false;
     m_enabled              = false;
@@ -123,8 +128,6 @@ void NextoBot::DrawMenu()
     {
         SetEnabled(enabled);
     }
-
-    ImGui::TextUnformatted("Private and offline matches only.");
 }
 
 void NextoBot::Tick()
@@ -162,12 +165,13 @@ void NextoBot::Tick()
     }
 
     int physicsFrame = EngineShare::GetPhysicsFrame();
-    int ticksElapsed = physicsFrame - m_previousPhysicsFrame;
-    if (ticksElapsed < 0 || ticksElapsed > kMaxTicksElapsed)
+    if (physicsFrame <= 0)
     {
-        ticksElapsed = kMaxTicksElapsed;
+        m_status = "Waiting for the physics frame counter";
+        return;
     }
 
+    int ticksElapsed       = std::clamp(physicsFrame - m_previousPhysicsFrame, 0, kMaxTicksElapsed);
     m_previousPhysicsFrame = physicsFrame;
     m_ticks += ticksElapsed;
 
@@ -198,6 +202,13 @@ void NextoBot::Tick()
         m_status = "Local car has an invalid team index";
         SetEnabled(false);
         return;
+    }
+
+    if (localTeam != m_loggedTeam || localCar.GetAddress() != m_loggedCarAddress)
+    {
+        m_loggedTeam       = localTeam;
+        m_loggedCarAddress = localCar.GetAddress();
+        fmt::println("[Bot] Playing car {:#x} on team {}", m_loggedCarAddress, m_loggedTeam);
     }
 
     std::vector<Car> cars = CarList::GetAll();
@@ -261,7 +272,7 @@ void NextoBot::UpdateKickoff(int ticksElapsed, const Car &localCar, const std::v
 
     if (m_kickoffIndex >= 0)
     {
-        m_kickoffIndex += ticksElapsed;
+        m_kickoffIndex += std::min(ticksElapsed, kMaxKickoffTicksPerUpdate);
     }
     else if (m_kickoffIndex == kKickoffIndexUndecided)
     {
@@ -736,6 +747,14 @@ bool NextoBot::LoadModel()
         std::filesystem::path executableDirectory = std::filesystem::read_symlink("/proc/self/exe").parent_path();
         m_model                                   = torch::jit::load(executableDirectory / "nexto-model.pt");
         m_model->eval();
+
+        int entityCount        = kWarmupPlayerCount + 35;
+        torch::Tensor query    = torch::zeros({1, 1, 32}, torch::TensorOptions().dtype(torch::kFloat32));
+        torch::Tensor keyValue = torch::zeros({1, entityCount, 24}, torch::TensorOptions().dtype(torch::kFloat32));
+        torch::Tensor mask     = torch::zeros({1, entityCount}, torch::TensorOptions().dtype(torch::kFloat32));
+        torch::NoGradGuard noGrad;
+        m_model->forward({c10::ivalue::Tuple::create({query, keyValue, mask})});
+
         m_status = "Nexto model loaded";
         return true;
     }
@@ -786,6 +805,6 @@ void NextoBot::SetEnabled(bool enabled)
     m_ticks                = kTickSkip;
     m_previousPhysicsFrame = EngineShare::GetPhysicsFrame();
     m_action               = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-    m_status               = "Nexto enabled; waiting for an active match";
+    m_status               = "Nexto enabled, waiting for an active match";
     fmt::println("Nexto enabled");
 }

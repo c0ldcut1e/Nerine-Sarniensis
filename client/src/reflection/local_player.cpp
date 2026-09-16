@@ -26,7 +26,16 @@ Car LocalPlayer::GetCar() const
 {
     OffsetResolver *offsetResolver = OffsetResolver::GetInstance();
     uint64_t playerControllerClass = offsetResolver->GetClassAddress("PlayerController_TA");
-    return Car(ReadMemory<uint64_t>(m_address + offsetResolver->GetPropertyOffsetCached(playerControllerClass, "Car")));
+    uint64_t vehicleClass          = offsetResolver->GetClassAddress("Vehicle_TA");
+    uint64_t car                   = ReadMemory<uint64_t>(m_address + offsetResolver->GetPropertyOffsetCached(playerControllerClass, "Car"));
+    uint64_t controllerPri =
+            ReadMemory<uint64_t>(m_address + offsetResolver->GetPropertyOffsetCached(playerControllerClass, "PlayerReplicationInfo"));
+    if (ReadMemory<uint64_t>(car + offsetResolver->GetPropertyOffsetCached(vehicleClass, "PRI")) != controllerPri)
+    {
+        return Car(0);
+    }
+
+    return Car(car);
 }
 
 LocalPlayer LocalPlayer::Find()
