@@ -10,7 +10,9 @@
 
 #include <imgui.h>
 
-constexpr int kCircleSegments = 64;
+constexpr int kCircleSegments                    = 64;
+constexpr float kMinInverseScaleRadiusMultiplier = 0.15;
+constexpr float kMaxInverseScaleRadiusMultiplier = 0.3;
 
 CarBoostAmounts::CarBoostAmounts()
 {
@@ -53,7 +55,7 @@ void CarBoostAmounts::Render(float screenWidth, float screenHeight)
     FTPOV pov             = player.GetCameraPOV();
     Car localCar          = player.GetCar();
     std::vector<Car> cars = CarList::GetAll();
-    ImDrawList *drawList  = ImGui::GetForegroundDrawList();
+    ImDrawList *drawList  = ImGui::GetBackgroundDrawList();
 
     for (const Car &car : cars)
     {
@@ -85,7 +87,8 @@ void CarBoostAmounts::Render(float screenWidth, float screenHeight)
         ImGui::ColorConvertHSVtoRGB(progress / 3.0f, 0.85f, 0.9f, colorR, colorG, colorB);
 
         ImVec2 center(screenX, screenY);
-        float radius    = m_circleRadius * scale;
+        float radius    = std::clamp(m_circleRadius / scale, m_circleRadius * kMinInverseScaleRadiusMultiplier,
+                                     m_circleRadius * kMaxInverseScaleRadiusMultiplier);
         ImU32 fillColor = ImGui::ColorConvertFloat4ToU32(ImVec4(colorR, colorG, colorB, 1.0f));
 
         if (progress >= 1.0f)

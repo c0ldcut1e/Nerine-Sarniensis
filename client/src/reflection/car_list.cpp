@@ -4,7 +4,7 @@
 
 #include "background_scanner.hpp"
 #include "match.hpp"
-#include "nerine_memory.hpp"
+#include "core/nerine_memory.hpp"
 #include "offset_resolver.hpp"
 
 constexpr int kScanIntervalMilliseconds = 50;
@@ -18,9 +18,9 @@ static std::vector<uint64_t> ScanForLiveCarAddresses()
         return {};
     }
 
-    OffsetResolver &offsetResolver = OffsetResolver::GetInstance();
-    uint64_t gameEventClass        = offsetResolver.GetClassAddress("GameEvent_TA");
-    uint64_t carsOffset            = offsetResolver.GetPropertyOffsetCached(gameEventClass, "Cars");
+    OffsetResolver *offsetResolver = OffsetResolver::GetInstance();
+    uint64_t gameEventClass        = offsetResolver->GetClassAddress("GameEvent_TA");
+    uint64_t carsOffset            = offsetResolver->GetPropertyOffsetCached(gameEventClass, "Cars");
     int count                      = ReadMemory<int>(gameEvent + carsOffset + 0x8);
     if (count <= 0 || count > kMaxPlausibleCarCount)
     {

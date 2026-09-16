@@ -13,6 +13,9 @@ public:
     FVector GetLocation() const;
     uint8_t GetPickupState() const;
     float GetRespawnDelay() const;
+    float GetBoostAmount() const;
+
+    static void ClearStaticCache();
 };
 
 #endif

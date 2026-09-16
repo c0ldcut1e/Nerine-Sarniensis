@@ -6,6 +6,7 @@
 class Projection
 {
 public:
+    static void WorldToCamera(FVector worldLocation, FTPOV pov, FVector &outCamera);
     static bool WorldToScreen(FVector worldLocation, FTPOV pov, float screenWidth, float screenHeight, float &outX, float &outY, float &outScale);
 };
 

@@ -4,18 +4,28 @@
 #include <mutex>
 #include <thread>
 
-#include "ball.hpp"
+#include "boost_pad.hpp"
+#include "car.hpp"
+#include "core/nerine_memory.hpp"
 #include "object_array.hpp"
 #include "offset_resolver.hpp"
 #include "remote_object.hpp"
 
-constexpr int kScanIntervalMilliseconds = 50;
-constexpr float kMinPlausibleBallZ      = 1.0f;
+#include <fmt/core.h>
 
-static uint64_t g_ballClassAddress;
+constexpr int kScanIntervalMilliseconds     = 50;
+constexpr int kFullScanIntervalMilliseconds = 1000;
+constexpr int kMaxPlausibleBallCount        = 32;
+
 static uint64_t g_gameEventClassAddress;
 static uint64_t g_playerClassAddress;
 static uint64_t g_boostPadClassAddress;
+
+static uint64_t g_scannedBallAddress;
+static uint64_t g_scannedGameEventAddress;
+static uint64_t g_scannedLocalPlayerAddress;
+static std::vector<uint64_t> g_scannedBoostPadAddresses;
+static uint64_t g_boostPadScanGameEvent;
 
 static std::mutex g_mutex;
 static uint64_t g_ballAddress;
@@ -23,88 +33,159 @@ static uint64_t g_gameEventAddress;
 static uint64_t g_localPlayerAddress;
 static std::vector<uint64_t> g_boostPadAddresses;
 
+static void ResolveClassAddresses()
+{
+    if (!g_gameEventClassAddress)
+    {
+        g_gameEventClassAddress = OffsetResolver::GetInstance()->TryGetClassAddress("GameEvent_Soccar_TA");
+    }
+
+    if (!g_playerClassAddress)
+    {
+        g_playerClassAddress = OffsetResolver::GetInstance()->TryGetClassAddress("PlayerController_TA");
+    }
+
+    if (!g_boostPadClassAddress)
+    {
+        g_boostPadClassAddress = OffsetResolver::GetInstance()->TryGetClassAddress("VehiclePickup_Boost_TA");
+    }
+}
+
+static bool IsLocalPlayerController(uint64_t address)
+{
+    OffsetResolver *offsetResolver = OffsetResolver::GetInstance();
+    return ReadMemory<uint64_t>(address + offsetResolver->GetPropertyOffsetCached(g_playerClassAddress, "Player")) != 0;
+}
+
+static uint64_t ReadFirstGameBall()
+{
+    OffsetResolver *offsetResolver = OffsetResolver::GetInstance();
+    uint64_t ballsOffset           = offsetResolver->GetPropertyOffsetCached(g_gameEventClassAddress, "GameBalls");
+    int count                      = ReadMemory<int>(g_scannedGameEventAddress + ballsOffset + sizeof(uint64_t));
+
+    if (count <= 0 || count > kMaxPlausibleBallCount)
+    {
+        return 0;
+    }
+
+    return ReadMemory<uint64_t>(ReadMemory<uint64_t>(g_scannedGameEventAddress + ballsOffset));
+}
+
+static void DeriveWorldState()
+{
+    if (g_scannedLocalPlayerAddress &&
+        (!RemoteObject(g_scannedLocalPlayerAddress).IsValidInstanceOf(g_playerClassAddress) || !IsLocalPlayerController(g_scannedLocalPlayerAddress)))
+    {
+        fmt::println("[WorldScanner] Local player controller {:#x} is no longer valid", g_scannedLocalPlayerAddress);
+        g_scannedLocalPlayerAddress = 0;
+    }
+
+    g_scannedGameEventAddress = 0;
+    g_scannedBallAddress      = 0;
+
+    if (!g_scannedLocalPlayerAddress || !g_gameEventClassAddress)
+    {
+        return;
+    }
+
+    OffsetResolver *offsetResolver = OffsetResolver::GetInstance();
+    uint64_t gameEvent =
+            ReadMemory<uint64_t>(g_scannedLocalPlayerAddress + offsetResolver->GetPropertyOffsetCached(g_playerClassAddress, "SoccarGameEvent"));
+    if (!gameEvent || !RemoteObject(gameEvent).IsValidInstanceOf(g_gameEventClassAddress))
+    {
+        return;
+    }
+
+    g_scannedGameEventAddress = gameEvent;
+    g_scannedBallAddress      = ReadFirstGameBall();
+}
+
+static void FullScan()
+{
+    std::vector<uint64_t> addresses = ObjectArray::GetAllObjectAddresses();
+
+    Car::ClearStaticCache();
+    BoostPad::ClearStaticCache();
+    g_scannedBoostPadAddresses.clear();
+
+    for (size_t i = 0; i < addresses.size(); i++)
+    {
+        RemoteObject object(addresses[i]);
+        uint64_t classAddress = object.GetClassAddress();
+        if (g_playerClassAddress && classAddress == g_playerClassAddress && !g_scannedLocalPlayerAddress &&
+            object.IsValidInstanceOf(g_playerClassAddress) && IsLocalPlayerController(object.GetAddress()))
+        {
+            g_scannedLocalPlayerAddress = object.GetAddress();
+        }
+        else if (g_boostPadClassAddress && classAddress == g_boostPadClassAddress && object.IsValidInstanceOf(g_boostPadClassAddress))
+        {
+            g_scannedBoostPadAddresses.push_back(object.GetAddress());
+        }
+    }
+
+    fmt::println("[WorldScanner] Full scan of {} objects: local player {:#x}, {} boost pads", addresses.size(), g_scannedLocalPlayerAddress,
+                 g_scannedBoostPadAddresses.size());
+}
+
+static void LogStateChanges()
+{
+    static uint64_t lastLocalPlayer;
+    static uint64_t lastGameEvent;
+    static uint64_t lastBall;
+
+    if (g_scannedLocalPlayerAddress != lastLocalPlayer)
+    {
+        lastLocalPlayer = g_scannedLocalPlayerAddress;
+        fmt::println("[WorldScanner] Local player -> {:#x}", lastLocalPlayer);
+    }
+
+    if (g_scannedGameEventAddress != lastGameEvent)
+    {
+        lastGameEvent = g_scannedGameEventAddress;
+        fmt::println("[WorldScanner] Game event -> {:#x}", lastGameEvent);
+    }
+
+    if (g_scannedBallAddress != lastBall)
+    {
+        lastBall = g_scannedBallAddress;
+        fmt::println("[WorldScanner] Ball -> {:#x}", lastBall);
+    }
+}
+
 static void ScanLoop()
 {
+    std::chrono::steady_clock::time_point lastFullScan;
+
     while (true)
     {
-        if (!g_ballClassAddress)
+        ResolveClassAddresses();
+        DeriveWorldState();
+
+        if (!g_scannedGameEventAddress && g_boostPadScanGameEvent)
         {
-            g_ballClassAddress = OffsetResolver::GetInstance().TryGetClassAddress("Ball_TA");
+            g_boostPadScanGameEvent = 0;
+            g_scannedBoostPadAddresses.clear();
+            BoostPad::ClearStaticCache();
+            Car::ClearStaticCache();
         }
 
-        if (!g_gameEventClassAddress)
+        bool needsFullScan = !g_scannedLocalPlayerAddress || (g_scannedGameEventAddress && g_scannedGameEventAddress != g_boostPadScanGameEvent);
+        if (needsFullScan && std::chrono::steady_clock::now() - lastFullScan >= std::chrono::milliseconds(kFullScanIntervalMilliseconds))
         {
-            g_gameEventClassAddress = OffsetResolver::GetInstance().TryGetClassAddress("GameEvent_Soccar_TA");
+            FullScan();
+            DeriveWorldState();
+            g_boostPadScanGameEvent = g_scannedGameEventAddress;
+            lastFullScan            = std::chrono::steady_clock::now();
         }
 
-        if (!g_playerClassAddress)
-        {
-            g_playerClassAddress = OffsetResolver::GetInstance().TryGetClassAddress("PlayerController_TA");
-        }
-
-        if (!g_boostPadClassAddress)
-        {
-            g_boostPadClassAddress = OffsetResolver::GetInstance().TryGetClassAddress("VehiclePickup_Boost_TA");
-        }
-
-        std::vector<uint64_t> addresses = ObjectArray::GetAllObjectAddresses();
-        uint64_t ballFallback           = 0;
-        uint64_t ballAddress            = 0;
-        uint64_t gameEventAddress       = 0;
-        uint64_t playerAddress          = 0;
-        std::vector<uint64_t> boostPadAddresses;
-        for (size_t i = 0; i < addresses.size(); i++)
-        {
-            RemoteObject object(addresses[i]);
-            uint64_t classAddress = object.GetClassAddress();
-            if (g_ballClassAddress && classAddress == g_ballClassAddress && object.IsValidInstanceOf(g_ballClassAddress))
-            {
-                if (!ballFallback)
-                {
-                    ballFallback = object.GetAddress();
-                }
-
-                if (!ballAddress)
-                {
-                    Ball candidate(object.GetAddress());
-
-                    if (candidate.GetLocation().Z >= kMinPlausibleBallZ)
-                    {
-                        ballAddress = object.GetAddress();
-                    }
-                }
-            }
-            else if (g_gameEventClassAddress && classAddress == g_gameEventClassAddress && !gameEventAddress &&
-                     object.IsValidInstanceOf(g_gameEventClassAddress))
-            {
-                gameEventAddress = object.GetAddress();
-            }
-            else if (g_playerClassAddress && classAddress == g_playerClassAddress && !playerAddress && object.IsValidInstanceOf(g_playerClassAddress))
-            {
-                playerAddress = object.GetAddress();
-            }
-            else if (g_boostPadClassAddress && classAddress == g_boostPadClassAddress && object.IsValidInstanceOf(g_boostPadClassAddress))
-            {
-                boostPadAddresses.push_back(object.GetAddress());
-            }
-        }
-
-        if (!ballAddress)
-        {
-            ballAddress = ballFallback;
-        }
-
-        if (!gameEventAddress)
-        {
-            ballAddress = 0;
-        }
+        LogStateChanges();
 
         {
             std::lock_guard<std::mutex> lock(g_mutex);
-            g_ballAddress        = ballAddress;
-            g_gameEventAddress   = gameEventAddress;
-            g_localPlayerAddress = playerAddress;
-            g_boostPadAddresses  = boostPadAddresses;
+            g_ballAddress        = g_scannedBallAddress;
+            g_gameEventAddress   = g_scannedGameEventAddress;
+            g_localPlayerAddress = g_scannedLocalPlayerAddress;
+            g_boostPadAddresses  = g_scannedBoostPadAddresses;
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(kScanIntervalMilliseconds));

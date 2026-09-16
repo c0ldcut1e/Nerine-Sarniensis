@@ -4,12 +4,12 @@
 #include <cstdint>
 #include <sys/types.h>
 
-#include "nerine_device.hpp"
+#include "core/nerine_device.hpp"
 
 class NerineGlobals
 {
 public:
-    static NerineGlobals &GetInstance();
+    static NerineGlobals *GetInstance();
 
     NerineGlobals(const NerineGlobals &other)            = delete;
     NerineGlobals &operator=(const NerineGlobals &other) = delete;

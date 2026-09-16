@@ -12,21 +12,31 @@
 
 ConfigManager::ConfigManager()
 {
-    m_ballPrediction  = NULL;
-    m_carBoostAmounts = NULL;
-    m_carHitbox       = NULL;
-    m_boostPadTimers  = NULL;
+    m_ballPrediction      = NULL;
+    m_carBoostAmounts     = NULL;
+    m_carHitbox           = NULL;
+    m_boostPadTimers      = NULL;
+    m_radar               = NULL;
+    m_matchDisplay        = NULL;
+    m_offscreenIndicators = NULL;
+    m_demoMarkers         = NULL;
 }
 
-void ConfigManager::Initialize(BallPrediction &ballPrediction, CarBoostAmounts &carBoostAmounts, CarHitbox &carHitbox, BoostPadTimers &boostPadTimers)
+void ConfigManager::Initialize(BallPrediction &ballPrediction, CarBoostAmounts &carBoostAmounts, CarHitbox &carHitbox, BoostPadTimers &boostPadTimers,
+                               Radar &radar, MatchDisplay &matchDisplay, OffscreenIndicators &offscreenIndicators, DemoMarkers &demoMarkers)
 {
     m_executableDirectory = std::filesystem::read_symlink("/proc/self/exe").parent_path();
     m_ballPrediction      = &ballPrediction;
     m_carBoostAmounts     = &carBoostAmounts;
     m_carHitbox           = &carHitbox;
     m_boostPadTimers      = &boostPadTimers;
+    m_radar               = &radar;
+    m_matchDisplay        = &matchDisplay;
+    m_offscreenIndicators = &offscreenIndicators;
+    m_demoMarkers         = &demoMarkers;
     snprintf(m_collisionMeshesDirectory, sizeof(m_collisionMeshesDirectory), "%s", Trajectory::GetCollisionMeshesFolder().c_str());
     snprintf(m_profileName, sizeof(m_profileName), "default");
+    snprintf(m_profileNameInput, sizeof(m_profileNameInput), "%s", m_profileName);
     LoadConfigDirectory();
     ApplyConfigDirectory();
 
@@ -38,6 +48,7 @@ void ConfigManager::Initialize(BallPrediction &ballPrediction, CarBoostAmounts &
     }
 
     snprintf(m_profileName, sizeof(m_profileName), "%s", m_configNames[0].c_str());
+    snprintf(m_profileNameInput, sizeof(m_profileNameInput), "%s", m_profileName);
     LoadConfig();
 }
 
@@ -84,6 +95,7 @@ void ConfigManager::DrawMenu()
             if (ImGui::Selectable(m_configNames[i].c_str(), selected))
             {
                 snprintf(m_profileName, sizeof(m_profileName), "%s", m_configNames[i].c_str());
+                snprintf(m_profileNameInput, sizeof(m_profileNameInput), "%s", m_profileName);
             }
 
             if (selected)
@@ -95,15 +107,16 @@ void ConfigManager::DrawMenu()
         ImGui::EndCombo();
     }
 
-    ImGui::InputText("Profile Name", m_profileName, sizeof(m_profileName));
+    ImGui::InputText("Profile Name", m_profileNameInput, sizeof(m_profileNameInput));
     if (ImGui::Button("Load Profile"))
     {
         LoadConfig();
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Save Profile") && m_profileName[0])
+    if (ImGui::Button("Save Profile") && m_profileNameInput[0])
     {
+        snprintf(m_profileName, sizeof(m_profileName), "%s", m_profileNameInput);
         SaveConfig();
         RefreshConfigs();
     }
@@ -140,11 +153,13 @@ void ConfigManager::DeleteConfig()
         RefreshConfigs();
         if (m_configNames.empty())
         {
-            m_profileName[0] = '\0';
+            m_profileName[0]      = '\0';
+            m_profileNameInput[0] = '\0';
             return;
         }
 
         snprintf(m_profileName, sizeof(m_profileName), "%s", m_configNames[0].c_str());
+        snprintf(m_profileNameInput, sizeof(m_profileNameInput), "%s", m_profileName);
         LoadConfig();
         return;
     }
@@ -181,12 +196,16 @@ void ConfigManager::LoadConfig()
 
     try
     {
-        toml::table config                 = toml::parse_file(configFile.c_str());
-        const toml::table *paths           = config["paths"].as_table();
-        const toml::table *ballPrediction  = config["ball_prediction"].as_table();
-        const toml::table *carBoostAmounts = config["car_boost_amounts"].as_table();
-        const toml::table *carHitbox       = config["car_hitbox"].as_table();
-        const toml::table *boostPadTimers  = config["boost_pad_timers"].as_table();
+        toml::table config                     = toml::parse_file(configFile.c_str());
+        const toml::table *paths               = config["paths"].as_table();
+        const toml::table *ballPrediction      = config["ball_prediction"].as_table();
+        const toml::table *carBoostAmounts     = config["car_boost_amounts"].as_table();
+        const toml::table *carHitbox           = config["car_hitbox"].as_table();
+        const toml::table *boostPadTimers      = config["boost_pad_timers"].as_table();
+        const toml::table *radar               = config["radar"].as_table();
+        const toml::table *matchDisplay        = config["match_display"].as_table();
+        const toml::table *offscreenIndicators = config["offscreen_indicators"].as_table();
+        const toml::table *demoMarkers         = config["demo_markers"].as_table();
 
         if (paths)
         {
@@ -216,6 +235,26 @@ void ConfigManager::LoadConfig()
         if (boostPadTimers)
         {
             m_boostPadTimers->LoadConfig(*boostPadTimers);
+        }
+
+        if (radar)
+        {
+            m_radar->LoadConfig(*radar);
+        }
+
+        if (matchDisplay)
+        {
+            m_matchDisplay->LoadConfig(*matchDisplay);
+        }
+
+        if (offscreenIndicators)
+        {
+            m_offscreenIndicators->LoadConfig(*offscreenIndicators);
+        }
+
+        if (demoMarkers)
+        {
+            m_demoMarkers->LoadConfig(*demoMarkers);
         }
     }
     catch (const toml::parse_error &error)
@@ -247,17 +286,29 @@ void ConfigManager::SaveConfig() const
     toml::table carBoostAmounts;
     toml::table carHitbox;
     toml::table boostPadTimers;
+    toml::table radar;
+    toml::table matchDisplay;
+    toml::table offscreenIndicators;
+    toml::table demoMarkers;
 
     paths.insert("collision_meshes_directory", m_collisionMeshesDirectory);
     m_ballPrediction->SaveConfig(ballPrediction);
     m_carBoostAmounts->SaveConfig(carBoostAmounts);
     m_carHitbox->SaveConfig(carHitbox);
     m_boostPadTimers->SaveConfig(boostPadTimers);
+    m_radar->SaveConfig(radar);
+    m_matchDisplay->SaveConfig(matchDisplay);
+    m_offscreenIndicators->SaveConfig(offscreenIndicators);
+    m_demoMarkers->SaveConfig(demoMarkers);
     config.insert("paths", std::move(paths));
     config.insert("ball_prediction", std::move(ballPrediction));
     config.insert("car_boost_amounts", std::move(carBoostAmounts));
     config.insert("car_hitbox", std::move(carHitbox));
     config.insert("boost_pad_timers", std::move(boostPadTimers));
+    config.insert("radar", std::move(radar));
+    config.insert("match_display", std::move(matchDisplay));
+    config.insert("offscreen_indicators", std::move(offscreenIndicators));
+    config.insert("demo_markers", std::move(demoMarkers));
 
     std::ofstream file(std::filesystem::path(m_configDirectory) / (std::string(m_profileName) + ".toml"));
     file << config;

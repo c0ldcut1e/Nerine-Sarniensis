@@ -1,0 +1,1 @@
+SUBSYSTEM=="hidraw", ACTION=="add", PROGRAM=="/usr/local/libexec/nerine_hidraw_gate udev-check %p", MODE:="0000", TAG-="uaccess"

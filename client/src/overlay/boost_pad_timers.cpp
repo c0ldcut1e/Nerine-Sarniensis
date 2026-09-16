@@ -9,8 +9,10 @@
 
 #include <imgui.h>
 
-constexpr int kCircleSegments       = 64;
-constexpr float kCircleHeightOffset = 90.0f;
+constexpr int kCircleSegments                    = 64;
+constexpr float kCircleHeightOffset              = 90.0f;
+constexpr float kMinInverseScaleRadiusMultiplier = 0.15;
+constexpr float kMaxInverseScaleRadiusMultiplier = 0.3;
 
 BoostPadTimers::BoostPadTimers()
 {
@@ -92,7 +94,8 @@ void BoostPadTimers::Render(float screenWidth, float screenHeight)
         }
 
         ImVec2 center(screenX, screenY);
-        float radius = m_circleRadius * scale;
+        float radius = std::clamp(m_circleRadius / scale, m_circleRadius * kMinInverseScaleRadiusMultiplier,
+                                  m_circleRadius * kMaxInverseScaleRadiusMultiplier);
 
         float colorR;
         float colorG;
@@ -100,7 +103,7 @@ void BoostPadTimers::Render(float screenWidth, float screenHeight)
         ImGui::ColorConvertHSVtoRGB(progress / 3.0f, 0.85f, 0.9f, colorR, colorG, colorB);
         ImU32 fillColor = ImGui::ColorConvertFloat4ToU32(ImVec4(colorR, colorG, colorB, 1.0f));
 
-        ImDrawList *drawList = ImGui::GetForegroundDrawList();
+        ImDrawList *drawList = ImGui::GetBackgroundDrawList();
 
         if (progress >= 1.0f)
         {

@@ -7,8 +7,8 @@
 #include <cstring>
 
 #include "name_table.hpp"
-#include "nerine_globals.hpp"
-#include "nerine_memory.hpp"
+#include "core/nerine_globals.hpp"
+#include "core/nerine_memory.hpp"
 #include "object_array.hpp"
 #include "remote_object.hpp"
 #include "ue3_offsets.hpp"
@@ -32,10 +32,10 @@ OffsetResolver::OffsetResolver()
     m_cacheSizeCap           = kDefaultCacheSizeCap;
 }
 
-OffsetResolver &OffsetResolver::GetInstance()
+OffsetResolver *OffsetResolver::GetInstance()
 {
     static OffsetResolver instance;
-    return instance;
+    return &instance;
 }
 
 uint64_t OffsetResolver::GetGObjectsOffset() const
@@ -60,7 +60,7 @@ uint64_t OffsetResolver::GetGPsyonixBuildIdOffset() const
 
 bool OffsetResolver::Resolve()
 {
-    uint64_t moduleBase = NerineGlobals::GetInstance().GetModuleBase();
+    uint64_t moduleBase = NerineGlobals::GetInstance()->GetModuleBase();
     if (g_objectsOffset == 0 || g_namesOffset == 0 || g_buildDateOffset == 0 || g_psyonixBuildIdOffset == 0)
     {
         uint32_t peHeaderOffset = ReadMemory<uint32_t>(moduleBase + 0x3C);
@@ -674,7 +674,7 @@ bool OffsetResolver::IsGObjectsValid() const
         return false;
     }
 
-    uint64_t moduleBase = NerineGlobals::GetInstance().GetModuleBase();
+    uint64_t moduleBase = NerineGlobals::GetInstance()->GetModuleBase();
     uint64_t data       = ReadMemory<uint64_t>(moduleBase + g_objectsOffset);
     int count           = ReadMemory<int>(moduleBase + g_objectsOffset + 0x8);
     return data != 0 && count > 0 && count < 2000000;
@@ -687,7 +687,7 @@ bool OffsetResolver::IsGNamesValid() const
         return false;
     }
 
-    uint64_t moduleBase = NerineGlobals::GetInstance().GetModuleBase();
+    uint64_t moduleBase = NerineGlobals::GetInstance()->GetModuleBase();
     uint64_t data       = ReadMemory<uint64_t>(moduleBase + g_namesOffset);
     if (data == 0)
     {

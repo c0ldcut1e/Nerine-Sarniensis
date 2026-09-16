@@ -12,7 +12,7 @@
 class OffsetResolver
 {
 public:
-    static OffsetResolver &GetInstance();
+    static OffsetResolver *GetInstance();
 
     OffsetResolver(const OffsetResolver &other)            = delete;
     OffsetResolver &operator=(const OffsetResolver &other) = delete;

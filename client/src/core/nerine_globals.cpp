@@ -1,9 +1,9 @@
 #include "nerine_globals.hpp"
 
-NerineGlobals &NerineGlobals::GetInstance()
+NerineGlobals *NerineGlobals::GetInstance()
 {
     static NerineGlobals instance;
-    return instance;
+    return &instance;
 }
 
 NerineGlobals::NerineGlobals()

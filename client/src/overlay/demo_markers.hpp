@@ -1,12 +1,12 @@
-#ifndef CAR_HITBOX_HPP
-#define CAR_HITBOX_HPP
+#ifndef DEMO_MARKERS_HPP
+#define DEMO_MARKERS_HPP
 
 #include <toml.hpp>
 
-class CarHitbox
+class DemoMarkers
 {
 public:
-    CarHitbox();
+    DemoMarkers();
 
     void DrawMenu();
     void Render(float screenWidth, float screenHeight);
@@ -15,7 +15,9 @@ public:
 
 private:
     bool m_enabled;
-    bool m_showEveryCar;
+    bool m_showWheels;
+    float m_duration;
+    float m_lineWidth;
     float m_color[4];
 };
 

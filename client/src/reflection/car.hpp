@@ -1,6 +1,9 @@
 #ifndef CAR_HPP
 #define CAR_HPP
 
+#include <cstdint>
+#include <string>
+
 #include "SdkHeaders.hpp"
 #include "remote_object.hpp"
 
@@ -25,9 +28,11 @@ public:
     bool IsOnGround() const;
     bool HasFlip() const;
     bool IsDemolished() const;
+    bool IsSupersonic() const;
+    std::string GetPlayerName() const;
+    bool HasStaticData() const;
 
-private:
-    uint64_t GetWheelAddress(int wheelIndex) const;
+    static void ClearStaticCache();
 };
 
 #endif

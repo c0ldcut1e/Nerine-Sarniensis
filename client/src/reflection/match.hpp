@@ -2,6 +2,7 @@
 #define MATCH_HPP
 
 #include <cstdint>
+#include <string>
 
 class Match
 {
@@ -10,6 +11,7 @@ public:
     static bool IsActive();
     static bool IsRoundActive();
     static bool HasBallBeenHit();
+    static std::string GetPlaylistName();
 };
 
 #endif

@@ -23,7 +23,9 @@ NerineOverlay::NerineOverlay()
     m_rendererInitialized = false;
     m_showDemo            = true;
     m_lastFrameTime       = 0;
-    m_configManager.Initialize(m_ballPrediction, m_carBoostAmounts, m_carHitbox, m_boostPadTimers);
+    m_nextoBot.Initialize(m_virtualGamepad);
+    m_configManager.Initialize(m_ballPrediction, m_carBoostAmounts, m_carHitbox, m_boostPadTimers, m_radar, m_matchDisplay, m_offscreenIndicators,
+                               m_demoMarkers);
 }
 
 int NerineOverlay::Run()
@@ -45,7 +47,10 @@ int NerineOverlay::Run()
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGui::GetIO().IniFilename = NULL;
+    ImGui::GetIO().IniFilename        = NULL;
+    ImGui::GetIO().ClipboardUserData  = this;
+    ImGui::GetIO().GetClipboardTextFn = GetClipboardText;
+    ImGui::GetIO().SetClipboardTextFn = SetClipboardText;
     ImGui::StyleColorsDark();
 
     m_window = GTK_WINDOW(gtk_window_new());
@@ -103,6 +108,40 @@ int NerineOverlay::Run()
     return 0;
 }
 
+bool NerineOverlay::StartVirtualGamepad()
+{
+    return m_virtualGamepad.AutoStart();
+}
+
+const char *NerineOverlay::GetClipboardText(void *data)
+{
+    NerineOverlay *overlay  = (NerineOverlay *) data;
+    GdkClipboard *clipboard = gdk_display_get_clipboard(gtk_widget_get_display(GTK_WIDGET(overlay->m_window)));
+    gdk_clipboard_read_text_async(clipboard, NULL, OnClipboardTextRead, overlay);
+    return "";
+}
+
+void NerineOverlay::SetClipboardText(void *data, const char *text)
+{
+    NerineOverlay *overlay  = (NerineOverlay *) data;
+    GdkClipboard *clipboard = gdk_display_get_clipboard(gtk_widget_get_display(GTK_WIDGET(overlay->m_window)));
+    gdk_clipboard_set_text(clipboard, text);
+}
+
+void NerineOverlay::OnClipboardTextRead(GObject *source, GAsyncResult *result, gpointer data)
+{
+    NerineOverlay *overlay = (NerineOverlay *) data;
+    char *text             = gdk_clipboard_read_text_finish(GDK_CLIPBOARD(source), result, NULL);
+    if (!overlay->m_focused || !text)
+    {
+        g_free(text);
+        return;
+    }
+
+    ImGui::GetIO().AddInputCharactersUTF8(text);
+    g_free(text);
+}
+
 gboolean NerineOverlay::OnRender(GtkGLArea *area, GdkGLContext *context, gpointer data)
 {
     NerineOverlay *overlay = (NerineOverlay *) data;
@@ -128,11 +167,46 @@ gboolean NerineOverlay::OnRender(GtkGLArea *area, GdkGLContext *context, gpointe
     if (overlay->m_focused)
     {
         ImGui::Begin("Sarniensis", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::PushID("config_manager");
         overlay->m_configManager.DrawMenu();
+        ImGui::PopID();
+
+        ImGui::PushID("ball_prediction");
         overlay->m_ballPrediction.DrawMenu();
+        ImGui::PopID();
+
+        ImGui::PushID("car_boost_amounts");
         overlay->m_carBoostAmounts.DrawMenu();
+        ImGui::PopID();
+
+        ImGui::PushID("car_hitbox");
         overlay->m_carHitbox.DrawMenu();
+        ImGui::PopID();
+
+        ImGui::PushID("boost_pad_timers");
         overlay->m_boostPadTimers.DrawMenu();
+        ImGui::PopID();
+
+        ImGui::PushID("radar");
+        overlay->m_radar.DrawMenu();
+        ImGui::PopID();
+
+        ImGui::PushID("match_display");
+        overlay->m_matchDisplay.DrawMenu();
+        ImGui::PopID();
+
+        ImGui::PushID("offscreen_indicators");
+        overlay->m_offscreenIndicators.DrawMenu();
+        ImGui::PopID();
+
+        ImGui::PushID("demo_markers");
+        overlay->m_demoMarkers.DrawMenu();
+        ImGui::PopID();
+
+        ImGui::PushID("bot");
+        overlay->m_nextoBot.DrawMenu();
+        ImGui::PopID();
+
         ImGui::End();
     }
 
@@ -140,6 +214,11 @@ gboolean NerineOverlay::OnRender(GtkGLArea *area, GdkGLContext *context, gpointe
     overlay->m_carBoostAmounts.Render(io.DisplaySize.x, io.DisplaySize.y);
     overlay->m_carHitbox.Render(io.DisplaySize.x, io.DisplaySize.y);
     overlay->m_boostPadTimers.Render(io.DisplaySize.x, io.DisplaySize.y);
+    overlay->m_radar.Render(io.DisplaySize.x, io.DisplaySize.y);
+    overlay->m_matchDisplay.Render(io.DisplaySize.x, io.DisplaySize.y);
+    overlay->m_offscreenIndicators.Render(io.DisplaySize.x, io.DisplaySize.y);
+    overlay->m_demoMarkers.Render(io.DisplaySize.x, io.DisplaySize.y);
+    overlay->m_nextoBot.Tick();
 
     ImGui::Render();
 
@@ -154,11 +233,11 @@ gboolean NerineOverlay::OnRender(GtkGLArea *area, GdkGLContext *context, gpointe
 gboolean NerineOverlay::OnKeyPressed(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer data)
 {
     NerineOverlay *overlay = (NerineOverlay *) data;
+    bool ctrlHeld          = (state & GDK_CONTROL_MASK) != 0;
     guint32 codepoint;
 
     (void) controller;
     (void) keycode;
-    (void) state;
     if (keyval == GDK_KEY_Shift_R)
     {
         overlay->SetFocused(!overlay->m_focused);
@@ -180,6 +259,26 @@ gboolean NerineOverlay::OnKeyPressed(GtkEventControllerKey *controller, guint ke
     {
         ImGui::GetIO().AddKeyEvent(ImGuiKey_Backspace, true);
         ImGui::GetIO().AddKeyEvent(ImGuiKey_Backspace, false);
+        return TRUE;
+    }
+
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, ctrlHeld);
+    if (ctrlHeld && (keyval == GDK_KEY_c || keyval == GDK_KEY_C))
+    {
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_C, true);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_C, false);
+        return TRUE;
+    }
+
+    if (ctrlHeld && (keyval == GDK_KEY_v || keyval == GDK_KEY_V))
+    {
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_V, true);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_V, false);
+        return TRUE;
+    }
+
+    if (ctrlHeld)
+    {
         return TRUE;
     }
 
